@@ -1,58 +1,42 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Docustream: Corporate Financial Document Management System
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+## Overview
+Docustream is a secure, multi-tenant B2B platform engineered for robust financial audit management and compliance tracking. The system enforces strict Separation of Duties (SoD) and relies on an event-driven architecture to ensure zero-touch provisioning for internally generated reports and rigorous validation for client-uploaded documents.
 
-## About Laravel
+## 1. System Architecture
+The application is built on **Laravel (PHP 8+)** using a scalable Model-View-Controller (MVC) pattern combined with asynchronous job queues and cloud-native storage.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+*   **Multi-Tenancy:** Data isolation is enforced at the database level via `company_id` foreign keys. All primary controllers and policies scope queries locally to the authenticated user's tenant context.
+*   **Storage Infrastructure:** Integration with AWS S3 (`Storage::disk('s3')`) ensures secure, decoupled object storage. File access is abstracted through temporary, signed URLs, preventing direct static asset exposure.
+*   **Asynchronous Processing:** Heavy financial reports are delegated to background workers (`GenerateHeavyReportJob`) using Redis/Database queues, preventing thread blocking and ensuring high availability during high-demand reporting cycles.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## 2. Core Workflows
+The platform implements a bidirectional data flow pipeline:
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+*   **Top-Down (Zero-Touch Provisioning):** 
+    Administrators and Managers trigger system-generated financial audits. The payload is offloaded to background jobs which construct the PDF and deposit it directly into S3. The state transitions to `completed`, allowing clients to securely download the file. Manual injection of external files into this pipeline is prohibited by design to maintain data integrity.
+*   **Bottom-Up (Client Compliance Uploads):** 
+    Clients upload external fiscal or legal documents. The system captures these payloads via strict validation and ACID-compliant database transactions (`DB::beginTransaction`). Files enter a `pending_review` state, requiring explicit cryptographic or visual validation by a Manager before transitioning to an `approved` state.
 
-## Learning Laravel
+## 3. Finite State Machine (FSM)
+Document lifecycles are strictly controlled via a defined status machine to eliminate ambiguous states:
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+| Status | Client Permissions | Manager Permissions | System Context |
+| :--- | :--- | :--- | :--- |
+| `processing` | Blocked (UI loading state) | Blocked (UI loading state) | Background job compiling heavy payload. |
+| `completed` | View / Download | View / Download | System-generated audit ready for consumption. |
+| `pending_review` | Read-only (Proof of submission) | Approve / Reject | External document awaiting compliance check. |
+| `approved` | View / Download | View / Download | Validated external document. |
+| `rejected` | Prompted to re-upload | Re-evaluate | Invalid external document; requires client action. |
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+## 4. Security & Compliance
+*   **Role-Based Access Control (RBAC):** Access is governed by Laravel Gates and Policies. A strict trifecta of roles (`super-admin`, `manager`, `client`) dictates route and action authorization.
+*   **Immutable Audit Trails:** Built via an Event-Driven Observer pattern (`ReportObserver`). All lifecycle events (creation, approval, rejection, deletion) automatically generate polymorphic records in the `audit_logs` table. This captures actors, IP addresses, exact timestamps, user agents, and JSON payloads of state changes.
+*   **Transactional Integrity:** File uploads utilize database rollbacks (`DB::rollBack`) on failure, ensuring that an S3 transfer failure does not leave phantom records in the PostgreSQL database.
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
-
-```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
-```
-
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
-
-## Contributing
-
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
-
-## Code of Conduct
-
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
-
-## Security Vulnerabilities
-
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
-
-## License
-
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+## 5. Technical Stack & Dependencies
+*   **Backend:** PHP 8.5, Laravel 13 Framework
+*   **Database:** PostgreSQL (Relational integrity, JSONB support for metadata)
+*   **Storage:** AWS S3 API (via `league/flysystem-aws-s3-v3`)
+*   **Queue Driver:** Redis / Database (for background job dispatching)
+*   **Frontend:** Blade Templating Engine, Tailwind CSS (for modern UI/UX components)
