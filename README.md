@@ -39,4 +39,19 @@ Document lifecycles are strictly controlled via a defined status machine to elim
 *   **Database:** PostgreSQL (Relational integrity, JSONB support for metadata)
 *   **Storage:** AWS S3 API (via `league/flysystem-aws-s3-v3`)
 *   **Queue Driver:** Redis / Database (for background job dispatching)
-*   **Frontend:** Blade Templating Engine, Tailwind CSS (for modern UI/UX components)
+* **Frontend:** Blade Templating Engine, Tailwind CSS (Styling), Alpine.js (Lightweight reactive UI components), Vite (Asset bundling)
+
+## 6. Local Development & Asset Compilation
+The frontend architecture relies on Vite to bundle Tailwind CSS and Alpine.js. To successfully run the application or deploy it, the Node.js environment must be initialized.
+
+**Local Environment:**
+To enable Hot Module Replacement (HMR) and compile assets on the fly during development, run the following commands:
+
+    npm install
+    npm run dev
+
+**Production Environment:**
+Before deploying to a live server, assets must be minified and versioned:
+
+    npm install
+    npm run build
